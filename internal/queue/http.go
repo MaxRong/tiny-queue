@@ -6,6 +6,7 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"mime"
 	"net/http"
 	"time"
 )
@@ -152,6 +153,12 @@ type enqueueResponse struct {
 }
 
 func handlePostJob(w http.ResponseWriter, r *http.Request, q *Queue) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		http.Error(w, http.StatusText(http.StatusUnsupportedMediaType), http.StatusUnsupportedMediaType)
+		return
+	}
+
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, postJobRequestBodyLimitBytes))
 	if err != nil {
 		var maxBytesError *http.MaxBytesError

@@ -172,7 +172,7 @@ func TestPostJobsEnqueuesRawPayload(t *testing.T) {
 	requestBody := `{"type":"email","payload":` + string(payload) + `}`
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(requestBody))
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	Router(q).ServeHTTP(recorder, request)
 
@@ -207,6 +207,57 @@ func TestPostJobsEnqueuesRawPayload(t *testing.T) {
 }
 
 func TestPostJobsValidation(t *testing.T) {
+	t.Run("unsupported media type", func(t *testing.T) {
+		for _, tt := range []struct {
+			name           string
+			body           string
+			contentType    string
+			setContentType bool
+		}{
+			{
+				name: "missing content type",
+				body: `{"type":"email","payload":{"ignored":true}}`,
+			},
+			{
+				name:           "malformed content type",
+				body:           `{"type":"email","payload":{"ignored":true}}`,
+				contentType:    "application/json; charset",
+				setContentType: true,
+			},
+			{
+				name:           "non-json content type",
+				body:           `{"type":"email","payload":{"ignored":true}}`,
+				contentType:    "text/plain",
+				setContentType: true,
+			},
+			{
+				name:           "non-json content type before oversized body",
+				body:           strings.Repeat("x", postJobRequestBodyLimitBytes+1),
+				contentType:    "text/plain",
+				setContentType: true,
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				q := New(Config{})
+				recorder := httptest.NewRecorder()
+				request := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(tt.body))
+				if tt.setContentType {
+					request.Header.Set("Content-Type", tt.contentType)
+				}
+
+				Router(q).ServeHTTP(recorder, request)
+
+				if recorder.Code != http.StatusUnsupportedMediaType {
+					t.Fatalf("POST /jobs unsupported media type status = %d, want %d; body: %s", recorder.Code, http.StatusUnsupportedMediaType, recorder.Body.String())
+				}
+				assertBodyContains(t, recorder.Body.String(), http.StatusText(http.StatusUnsupportedMediaType))
+				if jobs := q.Snapshot(0).Jobs; len(jobs) != 0 {
+					t.Fatalf("Snapshot jobs after unsupported media type = %d, want 0", len(jobs))
+				}
+			})
+		}
+	})
+
 	t.Run("malformed JSON", func(t *testing.T) {
 		q := New(Config{})
 		recorder := httptest.NewRecorder()
