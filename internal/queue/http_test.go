@@ -220,6 +220,40 @@ func TestPostJobsValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("oversized body", func(t *testing.T) {
+		q := New(Config{})
+		recorder := httptest.NewRecorder()
+		requestBody := `{"type":"email","payload":"` + strings.Repeat("x", postJobRequestBodyLimitBytes) + `"}`
+		request := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(requestBody))
+		request.Header.Set("Content-Type", "application/json")
+
+		Router(q).ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("POST /jobs oversized body status = %d, want %d; body: %s", recorder.Code, http.StatusRequestEntityTooLarge, recorder.Body.String())
+		}
+		if jobs := q.Snapshot(0).Jobs; len(jobs) != 0 {
+			t.Fatalf("Snapshot jobs after oversized body = %d, want 0", len(jobs))
+		}
+	})
+
+	t.Run("oversized trailing body", func(t *testing.T) {
+		q := New(Config{})
+		recorder := httptest.NewRecorder()
+		requestBody := `{"type":"email","payload":{}}` + strings.Repeat(" ", postJobRequestBodyLimitBytes)
+		request := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(requestBody))
+		request.Header.Set("Content-Type", "application/json")
+
+		Router(q).ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("POST /jobs oversized trailing body status = %d, want %d; body: %s", recorder.Code, http.StatusRequestEntityTooLarge, recorder.Body.String())
+		}
+		if jobs := q.Snapshot(0).Jobs; len(jobs) != 0 {
+			t.Fatalf("Snapshot jobs after oversized trailing body = %d, want 0", len(jobs))
+		}
+	})
+
 	for _, tt := range []struct {
 		name    string
 		jobType string

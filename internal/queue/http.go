@@ -1,11 +1,16 @@
 package queue
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"html/template"
+	"io"
 	"net/http"
 	"time"
 )
+
+const postJobRequestBodyLimitBytes = 1 << 20 // 1 MiB
 
 var statusTemplate = template.Must(template.New("status").Funcs(template.FuncMap{
 	"formatTime": formatStatusTime,
@@ -147,8 +152,19 @@ type enqueueResponse struct {
 }
 
 func handlePostJob(w http.ResponseWriter, r *http.Request, q *Queue) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, postJobRequestBodyLimitBytes))
+	if err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	var request enqueueRequest
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

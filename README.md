@@ -30,5 +30,5 @@ The sample server registers an `echo` handler, so this is enough to see a job mo
 - Everything lives in process memory; restarting the server clears the queue.
 - Job IDs are deterministic (`job-1`, `job-2`, ...) to keep local runs and tests easy to follow, not to act as production-safe identifiers.
 - Retry handling assumes job handlers are safe to run more than once; the queue does not provide idempotency, deduplication, or durable audit records.
-- The HTTP surface is meant for local exploration. It does not include authentication, authorization, rate limiting, request-size limits, or production server shutdown behavior.
+- The HTTP surface is meant for local exploration. It limits `POST /jobs` request bodies to 1 MiB, but does not include authentication, authorization, rate limiting, or production server shutdown behavior.
 - `GET /status` is view-only. New work goes through `POST /jobs`.
